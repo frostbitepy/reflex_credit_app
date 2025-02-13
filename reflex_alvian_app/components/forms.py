@@ -1,5 +1,7 @@
 import reflex as rx
 import pandas as pd
+import datetime
+from ..utils.pdf_maker import generate_detailed_pdf
 from typing import List
 from ..utils.calculos import (
     calcular_calificacion_final
@@ -72,13 +74,48 @@ class FormState(rx.State):
             self.cuota
         )
 
+        ratio_deuda_ingresos = round(self.deuda_financiera / self.ingresos, 2)  if self.ingresos > 0 else 0
+
+        # Generate PDF
+        pdf_buffer = generate_detailed_pdf(
+            nombre=self.nombre,
+            profesion=self.perfil_comercial,
+            ingresos=self.ingresos,
+            fecha_nacimiento=self.fecha_nacimiento or "No especificada",
+            empresa=self.empresa,
+            perfil_comercial=self.perfil_comercial,
+            producto=self.producto,
+            monto_solicitado=self.monto_solicitado,
+            plazo=self.plazo,
+            cuota=self.cuota,
+            garantia=self.garantia,
+            scoring=self.faja,
+            deuda_financiera=self.deuda_financiera,
+            ratio_deuda_ingresos=ratio_deuda_ingresos,
+            puntaje=puntaje_final,
+            dictamen=recomendacion,
+            comentarios=self.comentarios
+        )
+
+        # Generate filename with timestamp
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"dictamen_credito_{self.nombre.replace(' ', '_')}_{timestamp}.pdf"
+
+        # Save PDF to server's upload directory
+        pdf_path = rx.get_upload_dir() / filename
+        with open(pdf_path, "wb") as f:
+            f.write(pdf_buffer.getvalue())
+
+        # Trigger download
+        return rx.download(url=f"/upload/{filename}")
+    
         # Print the results
         print(self.form_data)
         print(f"Puntaje Final: {puntaje_final}")
         print(f"Recomendación: {recomendacion}")
         print(self.comentarios)
 
-        """
+        
         # Resetear todos los valores
         self.persona = ""
         self.nombre = ""
@@ -99,7 +136,7 @@ class FormState(rx.State):
         self.deuda_financiera = 0.0
         self.excel_filename = ""
         self.comentarios = ""
-        """
+        
 
     @rx.event
     def change_value(self, value: str, name: str):
@@ -206,7 +243,6 @@ def main_form(FormState) -> rx.Component:
                 rx.hstack(
                     rx.input(
                         placeholder="Ingresos",
-                        value=FormState.ingresos,
                         on_change=lambda value: FormState.change_value(value, "ingresos"),
                         type="number",
                         width=WIDTH,
@@ -254,7 +290,6 @@ def main_form(FormState) -> rx.Component:
                     ),
                     rx.input(
                         placeholder="Monto Solicitado",
-                        value=FormState.monto_solicitado,
                         on_change=lambda value: FormState.change_value(value, "monto_solicitado"),
                         type="number",
                         width=WIDTH,
@@ -264,14 +299,12 @@ def main_form(FormState) -> rx.Component:
                 rx.hstack(
                     rx.input(
                         placeholder="Monto Cuota",
-                        value=FormState.cuota,
                         on_change=lambda value: FormState.change_value(value, "cuota"),
                         type="number",
                         width=WIDTH,
                     ),
                     rx.input(
                         placeholder="Plazo (meses)",
-                        value=FormState.plazo,
                         on_change=lambda value: FormState.change_value(value, "plazo"),
                         type="number",
                         width=WIDTH,
@@ -332,6 +365,18 @@ def main_form(FormState) -> rx.Component:
                     value=FormState.comentarios,
                     on_change=lambda value: FormState.change_value(value, "comentarios"),
                     width=WIDTH,
+                ),
+                rx.button(
+                    "Submit",
+                    type="submit",
+                    bg="blue.500",
+                    color="white",
+                    _hover={"bg": "blue.600"},
+                ),
+                rx.text(
+                    "El PDF se descargará automáticamente después de enviar el formulario",
+                    color="gray.600",
+                    font_size="sm",
                 ),
                 rx.button("Submit", type="submit"),
             ),
