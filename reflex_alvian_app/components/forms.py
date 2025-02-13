@@ -1,6 +1,6 @@
 import reflex as rx
+import pandas as pd
 from typing import List
-from ..components.data_loader import data_loader_component, DataLoaderState
 from ..utils.calculos import (
     calcular_calificacion_final
 )
@@ -35,6 +35,7 @@ class FormState(rx.State):
     plazo: int = 0
     garantia: str = ""
     deuda_financiera: float = 0.0
+    excel_filename: str = ""
     comentarios: str = ""
     form_data = {}
 
@@ -72,18 +73,90 @@ class FormState(rx.State):
         )
 
         # Print the results
+        print(self.form_data)
         print(f"Puntaje Final: {puntaje_final}")
         print(f"Recomendación: {recomendacion}")
+        print(self.comentarios)
+
+        """
+        # Resetear todos los valores
+        self.persona = ""
+        self.nombre = ""
+        self.ci = ""
+        self.perfil_comercial = ""
+        self.fecha_nacimiento = ""
+        self.edad = 0
+        self.ingresos = 0.0
+        self.antiguedad_laboral = ""
+        self.posee_bienes = ""
+        self.empresa = ""
+        self.faja = ""
+        self.producto = ""
+        self.monto_solicitado = 0.0
+        self.cuota = 0.0
+        self.plazo = 0
+        self.garantia = ""
+        self.deuda_financiera = 0.0
+        self.excel_filename = ""
+        self.comentarios = ""
+        """
 
     @rx.event
     def change_value(self, value: str, name: str):
-        setattr(self, name, value)
+        """Convert and set form values with proper types."""
+        try:
+            # Handle type conversions based on field name
+            if name == "edad" or name == "plazo":
+                value = int(value) if value else 0
+            elif name in ["ingresos", "monto_solicitado", "cuota"]:
+                value = float(value) if value else 0.0
+            
+            # Set the converted value
+            setattr(self, name, value)
+            
+        except (ValueError, TypeError) as e:
+            print(f"Error converting value '{value}' for field '{name}': {str(e)}")
 
     @rx.event
-    async def update_deuda_financiera(self, value: float):
-        self.deuda_financiera = value
+    async def handle_upload(self, files: list[rx.UploadFile]):
+        """Handle file upload and process Excel data."""
+        try:
+            if not files:
+                return
+                
+            current_file = files[0]
+            upload_data = await current_file.read()
+            outfile = rx.get_upload_dir() / current_file.filename
 
-def main_form() -> rx.Component:
+            with outfile.open("wb") as file_object:
+                file_object.write(upload_data)
+
+            self.excel_filename = current_file.filename
+            self.load_excel_data(outfile)
+            
+        except Exception as e:
+            print(f"Error handling file upload: {str(e)}")
+            self.excel_filename = ""
+            self.deuda_financiera = 0.0
+
+    def load_excel_data(self, file_path):
+        """Load and process Excel data."""
+        try:
+            data_frame = pd.read_excel(file_path)
+            self.deuda_financiera = float(data_frame.iloc[1:, 4].sum())
+            print(f"Deuda Financiera actualizada: {self.deuda_financiera:,.2f}")
+        except Exception as e:
+            print(f"Error al procesar el archivo Excel: {str(e)}")
+            self.deuda_financiera = 0.0
+
+    def get_str_value(self, value, default=""):
+        """Helper method to safely convert values to string."""
+        try:
+            return str(value) if value not in [None, 0, 0.0] else default
+        except:
+            return default
+
+def main_form(FormState) -> rx.Component:
     return rx.vstack(
         rx.form(
             rx.vstack(
@@ -123,6 +196,7 @@ def main_form() -> rx.Component:
                     rx.input(
                         placeholder="Edad",
                         on_change=lambda value: FormState.change_value(value, "edad"),
+                        type="number",
                         width=WIDTH,
                     ),
                     width="100%",
@@ -132,7 +206,7 @@ def main_form() -> rx.Component:
                 rx.hstack(
                     rx.input(
                         placeholder="Ingresos",
-                        value=str(FormState.ingresos),
+                        value=FormState.ingresos,
                         on_change=lambda value: FormState.change_value(value, "ingresos"),
                         type="number",
                         width=WIDTH,
@@ -180,24 +254,24 @@ def main_form() -> rx.Component:
                     ),
                     rx.input(
                         placeholder="Monto Solicitado",
-                        value=str(FormState.monto_solicitado),
+                        value=FormState.monto_solicitado,
                         on_change=lambda value: FormState.change_value(value, "monto_solicitado"),
                         type="number",
                         width=WIDTH,
                     ),
-                    width="100%",
+                        width="100%",
                 ),
                 rx.hstack(
                     rx.input(
-                        placeholder="Cuota",
-                        value=str(FormState.cuota),
+                        placeholder="Monto Cuota",
+                        value=FormState.cuota,
                         on_change=lambda value: FormState.change_value(value, "cuota"),
                         type="number",
                         width=WIDTH,
                     ),
                     rx.input(
                         placeholder="Plazo (meses)",
-                        value=str(FormState.plazo),
+                        value=FormState.plazo,
                         on_change=lambda value: FormState.change_value(value, "plazo"),
                         type="number",
                         width=WIDTH,
@@ -214,16 +288,44 @@ def main_form() -> rx.Component:
                     width="100%",
                 ),
                 rx.divider(),
-                rx.input(
-                    placeholder="Deuda Financiera",
-                    value=str(FormState.deuda_financiera),
-                    on_change=lambda value: FormState.change_value(value, "deuda_financiera"),
-                    type="number",
-                    width=WIDTH,
+                rx.heading("Carga de Deuda Financiera", level=3, align="center", size="5"),
+                rx.vstack(  # Changed from rx.form to rx.vstack
+                    rx.upload(
+                        rx.vstack(
+                            rx.button(
+                                "Seleccionar Archivo Excel",
+                                type="button",
+                            ),
+                            rx.text("Arrastre el archivo aquí o haga clic para seleccionar", size="2"),
+                        ),
+                        id="upload1",
+                        max_files=1,
+                        padding="0.5em",
+                    ),
+                    rx.text(rx.selected_files("upload1")),
+                    rx.hstack(
+                        rx.button(
+                            "Calcular Deuda",
+                            type="button",
+                            on_click=lambda: FormState.handle_upload(rx.upload_files("upload1")),
+                        ),
+                        #rx.button(
+                        #    "Limpiar",
+                        #    type="button",
+                        #    on_click=lambda: rx.clear_selected_files("upload1"),
+                        #),
+                        spacing="2",
+                        padding="0.2em",
+                    ),
                 ),
-                rx.heading("Excel File Upload and Operations", level=3, align="center"),
-                # En forms.py, dentro de main_form()
-                data_loader_component(),
+                rx.cond(
+                    FormState.excel_filename != "",
+                    rx.vstack(
+                        rx.text("Deuda Financiera/Comercial calculada:", font_weight="bold"),
+                        rx.text(f"Gs. {FormState.deuda_financiera:,.0f}"),
+                        padding="0.5em",
+                    ),
+                ),                
                 rx.divider(),
                 rx.input(
                     placeholder="Comentarios",
