@@ -14,35 +14,51 @@ GARANTIA_OPTIONS = ["ASF", "Hipotecaria", "Prendaria", "Codeudoría"]
 PERFIL_COMERCIAL_OPTIONS = ['Asalariado', 'Profesional Independiente']
 BIENES_OPTIONS = ['No', 'Vehículo', 'Inmueble', 'Vehículo e Inmueble']
 PRODUCTO_OPTIONS = ["Producto 1", "Producto 2", "Producto 3"]
-WIDTH = "30%"
+WIDTH="50%"
 BADGE_COLOR = "primary"
 BADGE_WIDTH = "100%"
 BADGE_VARIANT = "soft"
 
 class FormState(rx.State):
-    persona: str = ""
+    # Select fields with default values
+    persona: str = PERSONA_OPTIONS[0]
+    perfil_comercial: str = PERFIL_COMERCIAL_OPTIONS[0]
+    antiguedad_laboral: str = ANTIGUEDAD_OPTIONS[0]
+    posee_bienes: str = BIENES_OPTIONS[0]
+    producto: str = PRODUCTO_OPTIONS[0]
+    garantia: str = GARANTIA_OPTIONS[0]
+    
+    # Text input fields
     nombre: str = ""
     ci: str = ""
-    perfil_comercial: str = ""
     fecha_nacimiento: str = ""
-    edad: int = 0
-    ingresos: float = 0.0
-    antiguedad_laboral: str = ""
-    posee_bienes: str = ""
     empresa: str = ""
     faja: str = ""
-    producto: str = ""
+    comentarios: str = ""
+    
+    # Numeric fields
+    edad: int = 0
+    ingresos: float = 0.0
     monto_solicitado: float = 0.0
     cuota: float = 0.0
     plazo: int = 0
-    garantia: str = ""
     deuda_financiera: float = 0.0
+    
+    # File handling fields
     excel_filename: str = ""
-    comentarios: str = ""
-    form_data = {}
+    last_generated_pdf: str = ""
+    
+    # Form data storage
+    form_data: dict = {}
+
+    # Result values
+    mostrar_resultados: bool = False
+    puntaje_final: float = 0.0
+    recomendacion: str = ""
 
     @rx.event
     def handle_submit(self, form_data: dict):
+        """Procesar el formulario y mostrar resultados"""
         self.form_data = {
             "persona": getattr(self, "persona", ""),
             "nombre": getattr(self, "nombre", ""),
@@ -74,7 +90,15 @@ class FormState(rx.State):
             self.cuota
         )
 
-        ratio_deuda_ingresos = round(self.deuda_financiera / self.ingresos, 2)  if self.ingresos > 0 else 0
+        # Guardar resultados en el estado
+        self.puntaje_final = puntaje_final
+        self.recomendacion = recomendacion
+        self.mostrar_resultados = True
+
+    @rx.event
+    def generate_and_download_pdf(self):
+        """Generar y descargar el PDF con los resultados"""
+        ratio_deuda_ingresos = round(self.deuda_financiera / self.ingresos, 2) if self.ingresos > 0 else 0
 
         # Generate PDF
         pdf_buffer = generate_detailed_pdf(
@@ -92,8 +116,8 @@ class FormState(rx.State):
             scoring=self.faja,
             deuda_financiera=self.deuda_financiera,
             ratio_deuda_ingresos=ratio_deuda_ingresos,
-            puntaje=puntaje_final,
-            dictamen=recomendacion,
+            puntaje=self.puntaje_final,
+            dictamen=self.recomendacion,
             comentarios=self.comentarios
         )
 
@@ -106,37 +130,47 @@ class FormState(rx.State):
         with open(pdf_path, "wb") as f:
             f.write(pdf_buffer.getvalue())
 
-        # Trigger download
-        return rx.download(url=f"/upload/{filename}")
-    
-        # Print the results
-        print(self.form_data)
-        print(f"Puntaje Final: {puntaje_final}")
-        print(f"Recomendación: {recomendacion}")
-        print(self.comentarios)
-
+        # Store the filename for later download
+        self.last_generated_pdf = filename
         
-        # Resetear todos los valores
-        self.persona = ""
+        return rx.download(url=f"/upload/{self.last_generated_pdf}")
+
+    @rx.event
+    def reset_form(self):
+        """Resetear todos los valores del formulario"""
+        # Reset select fields
+        self.persona = PERSONA_OPTIONS[0]
+        self.perfil_comercial = PERFIL_COMERCIAL_OPTIONS[0]
+        self.antiguedad_laboral = ANTIGUEDAD_OPTIONS[0]
+        self.posee_bienes = BIENES_OPTIONS[0]
+        self.producto = PRODUCTO_OPTIONS[0]
+        self.garantia = GARANTIA_OPTIONS[0]
+        
+        # Reset text fields
         self.nombre = ""
         self.ci = ""
-        self.perfil_comercial = ""
         self.fecha_nacimiento = ""
-        self.edad = 0
-        self.ingresos = 0.0
-        self.antiguedad_laboral = ""
-        self.posee_bienes = ""
         self.empresa = ""
         self.faja = ""
-        self.producto = ""
+        self.comentarios = ""
+        
+        # Reset numeric fields
+        self.edad = 0
+        self.ingresos = 0.0
         self.monto_solicitado = 0.0
         self.cuota = 0.0
         self.plazo = 0
-        self.garantia = ""
         self.deuda_financiera = 0.0
-        self.excel_filename = ""
-        self.comentarios = ""
         
+        # Reset file fields
+        self.excel_filename = ""
+        self.last_generated_pdf = ""
+        
+        # Reset results
+        self.mostrar_resultados = False
+        self.puntaje_final = 0.0
+        self.recomendacion = ""
+        self.form_data = {}
 
     @rx.event
     def change_value(self, value: str, name: str):
@@ -202,13 +236,13 @@ def main_form(FormState) -> rx.Component:
                 rx.hstack(
                     rx.select(
                         PERSONA_OPTIONS,
-                        value=PERSONA_OPTIONS[0],
+                        value=FormState.persona | PERSONA_OPTIONS[0],
                         on_change=lambda value: FormState.change_value(value, "persona"),
                         width=WIDTH,
                     ),
                     rx.select(
                         PERFIL_COMERCIAL_OPTIONS,
-                        value=PERFIL_COMERCIAL_OPTIONS[0],
+                        value=FormState.perfil_comercial | PERFIL_COMERCIAL_OPTIONS[0],
                         on_change=lambda value: FormState.change_value(value, "perfil_comercial"),
                         width=WIDTH,
                     ),
@@ -249,7 +283,7 @@ def main_form(FormState) -> rx.Component:
                     ),
                     rx.select(
                         ANTIGUEDAD_OPTIONS,
-                        value=ANTIGUEDAD_OPTIONS[0],
+                        value=FormState.antiguedad_laboral | ANTIGUEDAD_OPTIONS[0],
                         on_change=lambda value: FormState.change_value(value, "antiguedad_laboral"),
                         width=WIDTH,
                     ),
@@ -258,7 +292,7 @@ def main_form(FormState) -> rx.Component:
                 rx.hstack(
                     rx.select(
                         BIENES_OPTIONS,
-                        value=BIENES_OPTIONS[0],
+                        value=FormState.posee_bienes | BIENES_OPTIONS[0],
                         on_change=lambda value: FormState.change_value(value, "posee_bienes"),
                         width=WIDTH,
                     ),
@@ -284,7 +318,7 @@ def main_form(FormState) -> rx.Component:
                 rx.hstack(
                     rx.select(
                         PRODUCTO_OPTIONS,
-                        value=PRODUCTO_OPTIONS[0],
+                        value=FormState.producto | PRODUCTO_OPTIONS[0],
                         on_change=lambda value: FormState.change_value(value, "producto"),
                         width=WIDTH,
                     ),
@@ -314,7 +348,7 @@ def main_form(FormState) -> rx.Component:
                 rx.hstack(
                     rx.select(
                         GARANTIA_OPTIONS,
-                        value=GARANTIA_OPTIONS[0],
+                        value=FormState.garantia | GARANTIA_OPTIONS[0],
                         on_change=lambda value: FormState.change_value(value, "garantia"),
                         width=WIDTH,
                     ),
@@ -335,7 +369,7 @@ def main_form(FormState) -> rx.Component:
                         max_files=1,
                         padding="0.5em",
                     ),
-                    rx.text(rx.selected_files("upload1")),
+                    rx.text(rx.selected_files("upload1"), size="1"),
                     rx.hstack(
                         rx.button(
                             "Calcular Deuda",
@@ -366,19 +400,51 @@ def main_form(FormState) -> rx.Component:
                     on_change=lambda value: FormState.change_value(value, "comentarios"),
                     width=WIDTH,
                 ),
-                rx.button(
-                    "Submit",
-                    type="submit",
-                    bg="blue.500",
-                    color="white",
-                    _hover={"bg": "blue.600"},
+                rx.cond(
+                    FormState.mostrar_resultados,
+                    rx.vstack(
+                        rx.heading("Resultados de la Evaluación", size="5", align="center"),
+                        rx.box(
+                            rx.vstack(
+                                rx.text(f"Puntaje Final: {FormState.puntaje_final}", size="4"),
+                                rx.text(f"Recomendación: {FormState.recomendacion}", size="4"),
+                                spacing="4",
+                                padding="2em",
+                                border="1px solid",
+                                border_color="gray.200",
+                                border_radius="md",
+                            )
+                        ),
+                        rx.hstack(
+                            rx.button(
+                                "Generar y Descargar PDF",
+                                type="button",
+                                bg="green.500",
+                                color="white",
+                                _hover={"bg": "green.600"},
+                                on_click=FormState.generate_and_download_pdf,
+                            ),
+                            rx.button(
+                                "Nueva Solicitud",
+                                type="button",
+                                bg="blue.500",
+                                color="white",
+                                _hover={"bg": "blue.600"},
+                                on_click=FormState.reset_form,
+                            ),
+                            spacing="4",
+                            padding="1em",
+                        ),
+                    ),
+                    rx.button(
+                        "Procesar Solicitud",
+                        type="submit",
+                        bg="blue.500",
+                        color="white",
+                        _hover={"bg": "blue.600"},
+                        width="200px",
+                    ),
                 ),
-                rx.text(
-                    "El PDF se descargará automáticamente después de enviar el formulario",
-                    color="gray.600",
-                    font_size="sm",
-                ),
-                rx.button("Submit", type="submit"),
             ),
             on_submit=FormState.handle_submit,
             reset_on_submit=True,
