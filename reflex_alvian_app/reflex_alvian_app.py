@@ -1,6 +1,6 @@
 import reflex as rx
+import os
 from .components.forms import main_form, FormState
-
 
 
 def index() -> rx.Component:
@@ -15,4 +15,8 @@ def index() -> rx.Component:
 
 # Initialize the app with the base state
 app = rx.App()
-app.add_page(index)
+app.add_page(
+    index,
+    route="/",
+    title="Sistema de Evaluación Crediticia",
+    )

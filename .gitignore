@@ -4,5 +4,7 @@ __pycache__/
 *.py[cod]
 assets/external/
 .web
-*.xlsx  
+*.xlsx
 uploaded_files/
+assets/upload/*
+!assets/upload/.gitkeep

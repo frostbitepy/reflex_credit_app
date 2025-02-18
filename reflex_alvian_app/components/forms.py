@@ -98,42 +98,49 @@ class FormState(rx.State):
     @rx.event
     def generate_and_download_pdf(self):
         """Generar y descargar el PDF con los resultados"""
-        ratio_deuda_ingresos = round(self.deuda_financiera / self.ingresos, 2) if self.ingresos > 0 else 0
+        try:
+            ratio_deuda_ingresos = round(self.deuda_financiera / self.ingresos, 2) if self.ingresos > 0 else 0
 
-        # Generate PDF
-        pdf_buffer = generate_detailed_pdf(
-            nombre=self.nombre,
-            profesion=self.perfil_comercial,
-            ingresos=self.ingresos,
-            fecha_nacimiento=self.fecha_nacimiento or "No especificada",
-            empresa=self.empresa,
-            perfil_comercial=self.perfil_comercial,
-            producto=self.producto,
-            monto_solicitado=self.monto_solicitado,
-            plazo=self.plazo,
-            cuota=self.cuota,
-            garantia=self.garantia,
-            scoring=self.faja,
-            deuda_financiera=self.deuda_financiera,
-            ratio_deuda_ingresos=ratio_deuda_ingresos,
-            puntaje=self.puntaje_final,
-            dictamen=self.recomendacion,
-            comentarios=self.comentarios
-        )
+            # Generate PDF
+            pdf_buffer = generate_detailed_pdf(
+                nombre=self.nombre,
+                profesion=self.perfil_comercial,
+                ingresos=self.ingresos,
+                fecha_nacimiento=self.fecha_nacimiento or "No especificada",
+                empresa=self.empresa,
+                perfil_comercial=self.perfil_comercial,
+                producto=self.producto,
+                monto_solicitado=self.monto_solicitado,
+                plazo=self.plazo,
+                cuota=self.cuota,
+                garantia=self.garantia,
+                scoring=self.faja,
+                deuda_financiera=self.deuda_financiera,
+                ratio_deuda_ingresos=ratio_deuda_ingresos,
+                puntaje=self.puntaje_final,
+                dictamen=self.recomendacion,
+                comentarios=self.comentarios
+            )
 
-        # Generate filename with timestamp
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"dictamen_credito_{self.nombre.replace(' ', '_')}_{timestamp}.pdf"
+            # Generate filename with timestamp
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"dictamen_credito_{self.nombre.replace(' ', '_')}_{timestamp}.pdf"
 
-        # Save PDF to server's upload directory
-        pdf_path = rx.get_upload_dir() / filename
-        with open(pdf_path, "wb") as f:
-            f.write(pdf_buffer.getvalue())
+            # Save to upload directory
+            upload_path = rx.get_upload_dir() / filename
+            upload_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            with open(upload_path, "wb") as f:
+                f.write(pdf_buffer.getvalue())
 
-        # Store the filename for later download
-        self.last_generated_pdf = filename
-        
-        return rx.download(url=f"/upload/{self.last_generated_pdf}")
+            # Store the filename for later download
+            self.last_generated_pdf = filename
+            
+            # Return download URL
+            return rx.download(url=f"/upload/{filename}")
+        except Exception as e:
+            print(f"Error generating PDF: {str(e)}")
+            return None
 
     @rx.event
     def reset_form(self):
